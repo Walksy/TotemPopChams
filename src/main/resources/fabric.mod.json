@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "walksypopchams",
+  "version": "${version}",
+  "name": "Pop Chams",
+  "description": "Captures entity states and displays a ghosted version",
+  "authors": [
+    "Walksy"
+  ],
+  "contact": {
+    "issues": "https://github.com/Walksy/TotemPopChams/issues",
+    "sources": "https://github.com/Walksy/TotemPopChams",
+    "homepage": "https://discord.com/invite/zeu7uNuBWY"
+  },
+  "license": "MIT",
+  "icon": "assets/walksy/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "main": [
+      "walksy.popchams.TotemPopChams"
+    ],
+    "modmenu": [
+      "walksy.popchams.config.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "popchams.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": "*",
+    "minecraft": "*",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}
