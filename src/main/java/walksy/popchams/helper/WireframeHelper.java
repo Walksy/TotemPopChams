@@ -55,8 +55,10 @@ public class WireframeHelper {
             Vector3f from = vertices[edge[0]];
             Vector3f to = vertices[edge[1]];
 
-            buffer.vertex(matrix, from.x, from.y, from.z).color(r, g, b, a).normal(1, 1, 0);
-            buffer.vertex(matrix, to.x, to.y, to.z).color(r, g, b, a).normal(1, 1, 0);
+            Vector3f normal = new Vector3f(to).sub(from).normalize(); //fixes vertexes not being seen at certain angles
+
+            buffer.vertex(matrix, from.x, from.y, from.z).color(r, g, b, a).normal(normal.x, normal.y, normal.z);
+            buffer.vertex(matrix, to.x, to.y, to.z).color(r, g, b, a).normal(normal.x, normal.y, normal.z);
         }
     }
 
