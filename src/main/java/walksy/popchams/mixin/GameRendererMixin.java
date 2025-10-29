@@ -1,11 +1,10 @@
 package walksy.popchams.mixin;
 
-import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.client.util.math.MatrixStack;
 import org.joml.Matrix4f;
-import org.objectweb.asm.Opcodes;
+import org.joml.Quaternionf;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -16,17 +15,21 @@ import walksy.popchams.render.ChamRenderer;
 public abstract class GameRendererMixin {
 
     @Inject(
+        method = "renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V",
         at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/client/render/GameRenderer;renderHand(FZLorg/joml/Matrix4f;)V"
-            ),
-        method = "renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V")
-    private void onRenderWorldHandRendering(RenderTickCounter tickCounter,
-                                            CallbackInfo ci, @Local(ordinal = 2) Matrix4f matrix4f3,
-                                            @Local(ordinal = 1) float tickDelta)
-    {
+            )
+        )
+    private void onRenderWorldHandRendering(RenderTickCounter tickCounter, CallbackInfo ci) {
+        float tickDelta = tickCounter.getTickProgress(true);
+
+        Quaternionf q = ((GameRenderer)(Object)this).getCamera().getRotation().conjugate(new Quaternionf());
+        Matrix4f positionMatrix = new Matrix4f().rotate(q);
+
         MatrixStack matrixStack = new MatrixStack();
-        matrixStack.multiplyPositionMatrix(matrix4f3);
+        matrixStack.multiplyPositionMatrix(positionMatrix);
+
         ChamRenderer.render(matrixStack, tickDelta);
     }
 }

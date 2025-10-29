@@ -61,13 +61,13 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
         );
 
 
-        this.model.head.copyTransform(originalModel.head);
-        this.model.hat.copyTransform(originalModel.hat);
-        this.model.body.copyTransform(originalModel.body);
-        this.model.leftArm.copyTransform(originalModel.leftArm);
-        this.model.rightArm.copyTransform(originalModel.rightArm);
-        this.model.leftLeg.copyTransform(originalModel.leftLeg);
-        this.model.rightLeg.copyTransform(originalModel.rightLeg);
+        this.model.head.setTransform(originalModel.head.getTransform());
+        this.model.hat.setTransform(originalModel.hat.getTransform());
+        this.model.body.setTransform(originalModel.body.getTransform());
+        this.model.leftArm.setTransform(originalModel.leftArm.getTransform());
+        this.model.rightArm.setTransform(originalModel.rightArm.getTransform());
+        this.model.leftLeg.setTransform(originalModel.leftLeg.getTransform());
+        this.model.rightLeg.setTransform(originalModel.rightLeg.getTransform());
 
 
         this.bodyYaw = original.bodyYaw;
@@ -80,8 +80,8 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
         this.setSneaking(original.isSneaking());
 
         this.setPose(original.getPose());
-        Byte playerModel = original.getDataTracker().get(PlayerEntity.PLAYER_MODEL_PARTS);
-        dataTracker.set(PlayerEntity.PLAYER_MODEL_PARTS, playerModel);
+        Byte playerModel = original.getDataTracker().get(PlayerEntity.PLAYER_MODE_CUSTOMIZATION_ID);
+        dataTracker.set(PlayerEntity.PLAYER_MODE_CUSTOMIZATION_ID, playerModel);
     }
 
     public void tickAge()
