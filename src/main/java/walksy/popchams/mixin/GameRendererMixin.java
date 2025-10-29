@@ -16,10 +16,10 @@ import walksy.popchams.render.ChamRenderer;
 public abstract class GameRendererMixin {
 
     @Inject(
-        at = @At(value = "FIELD",
-            target = "Lnet/minecraft/client/render/GameRenderer;renderHand:Z",
-            opcode = Opcodes.GETFIELD,
-            ordinal = 0),
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/render/GameRenderer;renderHand(FZLorg/joml/Matrix4f;)V"
+            ),
         method = "renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V")
     private void onRenderWorldHandRendering(RenderTickCounter tickCounter,
                                             CallbackInfo ci, @Local(ordinal = 2) Matrix4f matrix4f3,

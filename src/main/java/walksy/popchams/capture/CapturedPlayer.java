@@ -11,6 +11,7 @@ import net.minecraft.client.render.entity.state.PlayerEntityRenderState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import walksy.popchams.config.Config;
+
 import walksy.popchams.handler.PositionHandler;
 
 import java.util.UUID;
@@ -32,14 +33,14 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
         super(MinecraftClient.getInstance().world, new GameProfile(UUID.randomUUID(), "Captured Player"));
 
         this.copyPositionAndRotation(original);
-        this.prevX = original.prevX;
-        this.prevY = original.prevY;
-        this.prevZ = original.prevZ;
-        this.prevYaw = original.prevYaw;
-        this.prevPitch = original.prevPitch;
+        this.lastX = original.lastX;
+        this.lastY = original.lastY;
+        this.lastZ = original.lastZ;
+        this.lastYaw = original.lastYaw;
+        this.lastPitch = original.lastPitch;
 
         this.limbAnimator.setSpeed(original.limbAnimator.getSpeed());
-        this.animPos = original.limbAnimator.getPos();
+        this.animPos = original.limbAnimator.getAnimationProgress();
 
 
         state = (PlayerEntityRenderState) mc.getEntityRenderDispatcher().getRenderer(this).getAndUpdateRenderState(this, 0F);
@@ -70,9 +71,9 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
 
 
         this.bodyYaw = original.bodyYaw;
-        this.prevBodyYaw = original.prevBodyYaw;
+        this.lastBodyYaw = original.lastBodyYaw;
         this.headYaw = original.headYaw;
-        this.prevHeadYaw = original.prevHeadYaw;
+        this.lastHeadYaw = original.lastHeadYaw;
         this.handSwingProgress = original.handSwingProgress;
         this.handSwingTicks = original.handSwingTicks;
 
@@ -86,7 +87,7 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
     public void tickAge()
     {
         this.age++;
-        if (age >= Config.CONFIG.instance().lifeTime)
+        if (age >= walksy.popchams.config.Config.CONFIG.instance().lifeTime)
         {
             this.remove(RemovalReason.DISCARDED);
             PositionHandler.getPositions().remove(this);
@@ -109,7 +110,7 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
     }
 
     @Override
-    public boolean isCollidable() {
+    public boolean isCollidable(Entity entity) {
         return false;
     }
 

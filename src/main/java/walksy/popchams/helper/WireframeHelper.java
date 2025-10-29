@@ -13,7 +13,7 @@ public class WireframeHelper {
 
     public static void renderModelPartWireframe(ModelPart part, MatrixStack matrices, VertexConsumer buffer, int color, float correction) {
         matrices.push();
-        part.rotate(matrices);
+        part.applyTransform(matrices);
 
         Matrix4f matrix = matrices.peek().getPositionMatrix();
 

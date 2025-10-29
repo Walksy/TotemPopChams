@@ -1,46 +1,45 @@
 package walksy.popchams;
 
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.RenderPhase;
-import net.minecraft.client.render.VertexFormat;
-import net.minecraft.client.render.VertexFormats;
 
 import java.util.OptionalDouble;
 
 public class Layers {
 
-    public static final RenderLayer TRANSLUCENT_ENTITY_HIGHLIGHT = RenderLayer.of(
-        "translucent_entity_highlight",
-        VertexFormats.POSITION_COLOR,
-        VertexFormat.DrawMode.QUADS,
-        256,
-        false,
-        true,
-        RenderLayer.MultiPhaseParameters.builder()
-            .program(RenderPhase.POSITION_COLOR_PROGRAM)
-            .transparency(RenderPhase.TRANSLUCENT_TRANSPARENCY)
-            .depthTest(RenderPhase.LEQUAL_DEPTH_TEST)
-            .cull(RenderPhase.ENABLE_CULLING)
-            .writeMaskState(RenderPhase.COLOR_MASK)
-            .build(false)
-    );
+    private static final RenderPipeline TRANSLUCENT_ENTITY_HIGHLIGHT_PIPELINE = RenderPipeline.builder(
+            RenderPipelines.POSITION_COLOR_SNIPPET)
+            .withCull(true)
+            .withLocation("translucent_entity_highlight")
+            .build();
 
-    public static RenderLayer getWireFrame(double lineWidth)
-    {
-        return RenderLayer.of(
-            "wireframe_outline",
-            VertexFormats.LINES,
-            VertexFormat.DrawMode.LINES,
+    public static RenderLayer TRANSLUCENT_ENTITY_HIGHLIGHT = RenderLayer.of(
+            "translucent_entity_highlight",
             256,
             false,
             true,
-            RenderLayer.MultiPhaseParameters.builder()
-                .transparency(RenderPhase.TRANSLUCENT_TRANSPARENCY)
-                .program(RenderPhase.LINES_PROGRAM)
-                .depthTest(RenderPhase.LEQUAL_DEPTH_TEST)
-                .cull(RenderPhase.ENABLE_CULLING)
-                .lineWidth(new RenderPhase.LineWidth(OptionalDouble.of(lineWidth)))
-                .build(true)
+            TRANSLUCENT_ENTITY_HIGHLIGHT_PIPELINE,
+            RenderLayer.MultiPhaseParameters.builder().build(false)
+    );
+
+    private static final RenderPipeline WIREFRAME_PIPELINE = RenderPipeline.builder(RenderPipelines.RENDERTYPE_LINES_SNIPPET)
+            .withCull(true)
+            .withLocation("wireframe_outline")
+            .build();
+
+    public static RenderLayer getWireFrame(double lineWidth){
+        return RenderLayer.of(
+                "wireframe_outline",
+                256,
+                false,
+                true,
+                WIREFRAME_PIPELINE,
+                RenderLayer.MultiPhaseParameters.builder()
+                        .lineWidth(new RenderPhase.LineWidth(OptionalDouble.of(lineWidth)))
+                        .build(true)
         );
+
     }
 }
