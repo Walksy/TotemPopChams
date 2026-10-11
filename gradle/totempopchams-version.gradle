@@ -1,0 +1,224 @@
+import java.nio.file.Path
+
+def versionsRoot = rootProject.file('versions')
+def modId = rootProject.property('mod_id') as String
+
+def readProps = { File dir ->
+    def props = new Properties()
+    new File(dir, 'gradle.properties').withInputStream { props.load(it) }
+    props
+}
+
+def chain = []
+def cursor = project.projectDir
+while (cursor != null) {
+    if (chain.contains(cursor)) {
+        throw new GradleException("Version folder parent cycle at ${cursor.name}")
+    }
+    chain << cursor
+    def parent = readProps(cursor).getProperty('parent', '').trim()
+    if (parent && !new File(versionsRoot, parent).directory) {
+        throw new GradleException("${cursor.name}: parent folder versions/${parent} does not exist")
+    }
+    cursor = parent ? new File(versionsRoot, parent) : null
+}
+def layers = chain + [rootProject.projectDir]
+ext.modLayers = layers
+
+def minecraftVersion = project.property('minecraft_version') as String
+def remap = (minecraftVersion.tokenize('.')[0] as int) < 26
+def javaVersion = (project.property('java_version') as String) as int
+def mcVersions = (project.findProperty('mc_versions') ?: minecraftVersion).toString().split(',')*.trim().findAll { it }
+
+apply plugin: remap ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
+apply plugin: 'maven-publish'
+
+version = "${rootProject.mod_version}+${project.name}"
+group = rootProject.maven_group
+
+base {
+    archivesName = rootProject.archives_base_name
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(javaVersion)
+    targetCompatibility = JavaVersion.toVersion(javaVersion)
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = javaVersion
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xmaxerrs', '100000']
+}
+
+def layeredFile = { String relative ->
+    layers.collect { new File(it, relative) }.find { it.file }
+}
+
+def ideSync = System.getProperty('idea.sync.active') == 'true'
+def active = rootProject.findProperty("${modId}.active")?.toString()?.trim()
+def isActive = project.name == active
+
+def replacementRules = []
+layers.reverse().each { layer ->
+    def rulesFile = new File(layer, 'replacements.txt')
+    if (rulesFile.file) {
+        rulesFile.eachLine { String line ->
+            def trimmed = line.trim()
+            if (trimmed) {
+                def parts = trimmed.split(/\s+=>\s+/, 2)
+                replacementRules << [java.util.regex.Pattern.compile(parts[0]), parts.length > 1 ? parts[1] : '']
+            }
+        }
+    }
+}
+
+['java', 'resources'].each { kind ->
+    def dirs = layers.collect { new File(it, "src/main/${kind}") }
+    def dirPaths = dirs.collect { it.toPath().toAbsolutePath().normalize() }
+    def set = sourceSets.main."${kind}"
+    if (ideSync && !isActive) {
+        set.setSrcDirs([])
+        return
+    }
+    if (kind == 'java' && !replacementRules.isEmpty()) {
+        def prepare = tasks.register('prepareVersionSources', Sync) {
+            into layout.buildDirectory.dir("${modId}/generated-java")
+            includeEmptyDirs = false
+            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+            dirs.eachWithIndex { File dir, int index ->
+                from(dir) {
+                    exclude '**/*.removed'
+                    eachFile { details ->
+                        def relative = details.relativePath.pathString
+                        if ((0..<index).any { nearer -> new File(dirs[nearer], relative + '.removed').exists() }) {
+                            details.exclude()
+                        }
+                    }
+                }
+            }
+            filesMatching('**/*.java') {
+                filter { String line ->
+                    def out = line
+                    replacementRules.each { rule -> out = rule[0].matcher(out).replaceAll(rule[1]) }
+                    out
+                }
+            }
+            inputs.property('modReplacements', replacementRules.collect { it[0].pattern() + ' => ' + it[1] }.join('\n'))
+        }
+        set.setSrcDirs([prepare])
+        return
+    }
+    set.setSrcDirs(dirs)
+    set.exclude { FileTreeElement element ->
+        if (element.directory) {
+            return false
+        }
+        Path file = element.file.toPath().toAbsolutePath().normalize()
+        int owner = dirPaths.findIndexOf { file.startsWith(it) }
+        if (owner <= 0) {
+            return false
+        }
+        def relative = dirPaths[owner].relativize(file).toString()
+        (0..<owner).any { nearer ->
+            new File(dirs[nearer], relative).exists() || new File(dirs[nearer], relative + '.removed').exists()
+        }
+    }
+    set.exclude '**/*.removed'
+}
+
+def widenerName = rootProject.findProperty('access_widener')?.toString()
+
+loom {
+    def widener = widenerName ? layeredFile("src/main/resources/${widenerName}") : null
+    if (widener != null && remap) {
+        def generated = layout.buildDirectory.file("${modId}/${widenerName}").get().asFile
+        generated.parentFile.mkdirs()
+        def lines = widener.readLines()
+        generated.text = (['accessWidener v2 named'] + lines.drop(1)).join('\n') + '\n'
+        widener = generated
+    }
+    if (widener != null) {
+        accessWidenerPath = widener
+    }
+    runConfigs.configureEach {
+        ideConfigGenerated(isActive)
+        runDir = "../../run/${project.name}"
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'Terraformers'
+        url = 'https://maven.terraformersmc.com/'
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter {
+            includeGroup 'maven.modrinth'
+        }
+    }
+}
+
+def walksylibCoordinate = "${rootProject.walksylib_version}+${project.name}"
+def walksylib = rootProject.findProperty('walksylib.local') == 'true' ? files(rootProject.file("../WalksyLib/build/libs/WalksyLib-${walksylibCoordinate}.jar")) : "maven.modrinth:walksylib:${walksylibCoordinate}"
+def modmenuVersion = project.findProperty('modmenu_version')
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraftVersion}"
+    if (remap) {
+        mappings loom.officialMojangMappings()
+        modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+        modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+        modImplementation walksylib
+        if (modmenuVersion) {
+            modImplementation "com.terraformersmc:modmenu:${modmenuVersion}"
+        }
+    } else {
+        implementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+        implementation walksylib
+        if (modmenuVersion) {
+            implementation "com.terraformersmc:modmenu:${modmenuVersion}"
+        }
+    }
+}
+
+processResources {
+    def expansions = [
+            version             : project.version,
+            minecraft_dependency: mcVersions.size() == 1 ? mcVersions[0] : ">=${mcVersions.first()} <=${mcVersions.last()}",
+            java_version        : javaVersion
+    ]
+    inputs.properties expansions
+    filesMatching(['fabric.mod.json', '*.mixins.json', 'mixin.*.json']) {
+        expand expansions
+    }
+    if (remap && widenerName) {
+        filesMatching(widenerName) {
+            filter { String line -> line.startsWith('accessWidener ') ? 'accessWidener v2 named' : line }
+        }
+    }
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${rootProject.archives_base_name}" }
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = "${rootProject.archives_base_name.toLowerCase()}-${project.name}"
+            from components.java
+        }
+    }
+}

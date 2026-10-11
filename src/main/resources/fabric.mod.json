@@ -20,16 +20,17 @@
       "walksy.popchams.TotemPopChams"
     ],
     "walksylib": [
-      "walksy.popchams.config.WalksyLibIntegration"
+      "walksy.popchams.config.TotemPopChamsConfig"
     ]
   },
   "mixins": [
     "popchams.mixins.json"
   ],
+  "accessWidener": "totempopchams.accesswidener",
   "depends": {
-    "fabricloader": "*",
-    "minecraft": "*",
-    "java": ">=17",
-    "fabric-api": "*"
+    "minecraft": "${minecraft_dependency}",
+    "java": ">=${java_version}",
+    "fabric-api": "*",
+    "walksylib": ">=2.0.1"
   }
 }

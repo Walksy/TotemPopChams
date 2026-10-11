@@ -1,0 +1,3 @@
+import net\.minecraft\.client\.model\.player\.PlayerModel; => import net.minecraft.client.model.PlayerModel;
+import org\.jspecify\.annotations\.Nullable; => import org.jetbrains.annotations.Nullable;
+^\s*\.setLineWidth\(lineWidth\)$

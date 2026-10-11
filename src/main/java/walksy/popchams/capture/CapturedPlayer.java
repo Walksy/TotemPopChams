@@ -1,55 +1,60 @@
 package walksy.popchams.capture;
 
 import com.mojang.authlib.GameProfile;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.model.ModelPart;
-import net.minecraft.client.network.AbstractClientPlayerEntity;
-import net.minecraft.client.network.OtherClientPlayerEntity;
-import net.minecraft.client.render.entity.LivingEntityRenderer;
-import net.minecraft.client.render.entity.PlayerEntityRenderer;
-import net.minecraft.client.render.entity.model.EntityModelLayers;
-import net.minecraft.client.render.entity.model.PlayerEntityModel;
-import net.minecraft.client.render.entity.state.PlayerEntityRenderState;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
 import org.jspecify.annotations.Nullable;
 import walksy.popchams.handler.PositionHandler;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.RemotePlayer;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 
-public class CapturedPlayer extends OtherClientPlayerEntity {
+public class CapturedPlayer extends RemotePlayer {
 
+    private static final AtomicInteger NEXT_ID = new AtomicInteger();
     public float statePitch;
     public float glidingProcess;
     public float flyingRotation;
     public float animPos;
-    public PlayerEntityModel model;
-    public PlayerEntityRenderState state;
+    public PlayerModel model;
+    public AvatarRenderState state;
+    public boolean autoSpinAttack;
+    public boolean applyFlyingYRot;
 
-    public CapturedPlayer(final ClientWorld world, final PlayerEntity original) {
+    public CapturedPlayer(final ClientLevel world, final Player original) {
         super(world, new GameProfile(UUID.randomUUID(), "Captured Player"));
-        this.copyPositionAndRotation(original);
-        this.lastX = original.lastX;
-        this.lastY = original.lastY;
-        this.lastZ = original.lastZ;
-        this.lastYaw = original.lastYaw;
-        this.lastPitch = original.lastPitch;
-        this.limbAnimator.setSpeed(original.limbAnimator.getSpeed());
-        this.animPos = original.limbAnimator.getAnimationProgress();
-        MinecraftClient client = MinecraftClient.getInstance();
-        this.state = (PlayerEntityRenderState) client.getEntityRenderDispatcher().getRenderer(this).getAndUpdateRenderState(this, 0F);
+        this.setId(NEXT_ID.decrementAndGet());
+        this.copyPosition(original);
+        this.xo = original.xo;
+        this.yo = original.yo;
+        this.zo = original.zo;
+        this.yRotO = original.yRotO;
+        this.xRotO = original.xRotO;
+        this.walkAnimation.setSpeed(original.walkAnimation.speed());
+        this.animPos = original.walkAnimation.position();
+        Minecraft client = Minecraft.getInstance();
+        this.state = (AvatarRenderState) client.getEntityRenderDispatcher().getRenderer(this).createRenderState(this, 0F);
 
-        this.state.handSwingProgress = original.handSwingProgress;
-        this.state.sneaking = original.isSneaking();
-        this.state.glidingTicks = original.getGlidingTicks();
-        this.flyingRotation = state.flyingRotation;
-        this.statePitch = state.pitch;
-        this.glidingProcess = state.getGlidingProgress();
+        this.state.attackTime = original.attackAnim;
+        this.state.isDiscrete = original.isShiftKeyDown();
+        this.state.fallFlyingTimeInTicks = original.getFallFlyingTicks();
+        this.flyingRotation = state.flyingYRot;
+        this.statePitch = state.xRot;
+        this.glidingProcess = state.fallFlyingScale();
+        this.autoSpinAttack = state.isAutoSpinAttack;
+        this.applyFlyingYRot = state.shouldApplyFlyingYRot;
 
-        PlayerEntityModel originalModel = (PlayerEntityModel)
+        PlayerModel originalModel = (PlayerModel)
                 ((LivingEntityRenderer<?, ?, ?>) client.getEntityRenderDispatcher().getRenderer(original)).getModel();
-        this.model = new PlayerEntityModel(client.getLoadedEntityModels().getModelPart(EntityModelLayers.PLAYER), false);
+        this.model = new PlayerModel(client.getEntityModels().bakeLayer(ModelLayers.PLAYER), false);
         this.copyModelPartTransform(this.model.head, originalModel.head);
         this.copyModelPartTransform(this.model.hat, originalModel.hat);
         this.copyModelPartTransform(this.model.body, originalModel.body);
@@ -58,32 +63,47 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
         this.copyModelPartTransform(this.model.leftLeg, originalModel.leftLeg);
         this.copyModelPartTransform(this.model.rightLeg, originalModel.rightLeg);
 
-        this.bodyYaw = original.bodyYaw;
-        this.lastBodyYaw = original.lastBodyYaw;
-        this.headYaw = original.headYaw;
-        this.lastHeadYaw = original.lastHeadYaw;
-        this.handSwingProgress = original.handSwingProgress;
-        this.handSwingTicks = original.handSwingTicks;
+        this.yBodyRot = original.yBodyRot;
+        this.yBodyRotO = original.yBodyRotO;
+        this.yHeadRot = original.yHeadRot;
+        this.yHeadRotO = original.yHeadRotO;
+        this.attackAnim = original.attackAnim;
+        this.swingTime = original.swingTime;
 
-        this.setSneaking(original.isSneaking());
+        this.setShiftKeyDown(original.isShiftKeyDown());
         this.setPose(original.getPose());
     }
 
+    public void hideOuterLayers() {
+        this.state.showLeftPants = false;
+        this.state.showRightPants = false;
+        this.state.showLeftSleeve = false;
+        this.state.showRightSleeve = false;
+        this.state.showJacket = false;
+        this.state.showHat = false;
+        this.model.leftPants.visible = false;
+        this.model.rightPants.visible = false;
+        this.model.leftSleeve.visible = false;
+        this.model.rightSleeve.visible = false;
+        this.model.jacket.visible = false;
+        this.model.hat.visible = false;
+    }
+
     private void copyModelPartTransform(final ModelPart target, final ModelPart source) {
-        target.pitch = source.pitch;
-        target.yaw = source.yaw;
-        target.roll = source.roll;
-        target.originX = source.originX;
-        target.originY = source.originY;
-        target.originZ = source.originZ;
+        target.xRot = source.xRot;
+        target.yRot = source.yRot;
+        target.zRot = source.zRot;
+        target.x = source.x;
+        target.y = source.y;
+        target.z = source.z;
         target.xScale = source.xScale;
         target.yScale = source.yScale;
         target.zScale = source.zScale;
     }
 
     public void tickAge(final int lifeTime) {
-        this.age++;
-        if (this.age >= lifeTime) {
+        this.tickCount++;
+        if (this.tickCount >= lifeTime) {
             this.remove(RemovalReason.DISCARDED);
             PositionHandler.getPositions().remove(this);
         }
@@ -105,16 +125,16 @@ public class CapturedPlayer extends OtherClientPlayerEntity {
     }
 
     @Override
-    public boolean isCollidable(@Nullable Entity entity) {
+    public boolean canBeCollidedWith(@Nullable Entity entity) {
         return false;
     }
 
     @Override
-    public boolean collidesWith(Entity other) {
+    public boolean canCollideWith(Entity other) {
         return false;
     }
 
     @Override
-    protected void pushAway(Entity entity) {
+    protected void doPush(Entity entity) {
     }
 }

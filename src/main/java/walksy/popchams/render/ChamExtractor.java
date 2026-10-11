@@ -1,16 +1,15 @@
 package walksy.popchams.render;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.OverlayTexture;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.entity.model.PlayerEntityModel;
-import net.minecraft.client.render.entity.state.PlayerEntityRenderState;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.random.Random;
+import main.walksy.lib.api.render.WLGraphics3D;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.phys.Vec3;
 import walksy.popchams.Layers;
 import walksy.popchams.capture.CapturedPlayer;
 import walksy.popchams.handler.PositionHandler;
@@ -26,141 +25,119 @@ public class ChamExtractor {
         this.state = new ChamConfigState();
     }
 
-    public void extract(final MatrixStack matrices, final float delta) {
-        final VertexConsumerProvider.Immediate immediate = MinecraftClient.getInstance().getBufferBuilders().getEntityVertexConsumers();
+    public void extract(final PoseStack matrices, final float delta, final WLGraphics3D sink) {
         for (final CapturedPlayer player : PositionHandler.getPositions()) {
             this.state.updateConfigRenderState(player, delta);
             if (this.state.renderFillModel) {
-                this.renderPlayerModel(matrices, player, immediate);
+                this.renderPlayerModel(matrices, player, sink);
             }
             if (this.state.renderWireframe) {
-                this.renderWireframe(matrices, player, immediate);
+                this.renderWireframe(matrices, player, sink);
             }
         }
-        immediate.draw();
+        sink.finish();
     }
 
-    private void renderPlayerModel(final MatrixStack matrices, final CapturedPlayer player, final VertexConsumerProvider.Immediate immediate) {
+    private void renderPlayerModel(final PoseStack matrices, final CapturedPlayer player, final WLGraphics3D sink) {
         this.setupAndPush(matrices, player);
-        final PlayerEntityModel model = player.model;
-        this.setupRenderState(player.state, model);
+        final PlayerModel model = player.model;
+        player.hideOuterLayers();
         this.applyFlyingTransforms(player, matrices);
-
-        final VertexConsumer buffer = immediate.getBuffer(Layers.TRANSLUCENT_ENTITY_HIGHLIGHT);
         final int color = this.alphaColor(this.state.filledColor, this.state.alpha);
         if (!this.state.disperse) {
-            model.render(matrices, buffer, LIGHT, OverlayTexture.DEFAULT_UV, color);
+            sink.submit(matrices, Layers.TRANSLUCENT_ENTITY_HIGHLIGHT, (stack, buffer) -> model.renderToBuffer(stack, buffer, LIGHT, OverlayTexture.NO_OVERLAY, color));
         } else {
             for (final BodyPart part : BodyPart.values()) {
-                Vec3d pos = this.getPartDisplacement(player, part);
-                matrices.push();
-                matrices.translate(pos.getX(), pos.getY(), pos.getZ());
-                this.renderModelPart(model, part, matrices, buffer, color);
-                matrices.pop();
+                final Vec3 pos = this.getPartDisplacement(player, part);
+                matrices.pushPose();
+                matrices.translate(pos.x(), pos.y(), pos.z());
+                sink.submit(matrices, Layers.TRANSLUCENT_ENTITY_HIGHLIGHT, (stack, buffer) -> this.renderModelPart(model, part, stack, buffer, color));
+                matrices.popPose();
             }
         }
-
-        matrices.pop();
+        matrices.popPose();
     }
 
-    private void renderWireframe(final MatrixStack matrices, final CapturedPlayer player, final VertexConsumerProvider.Immediate immediate) {
+    private void renderWireframe(final PoseStack matrices, final CapturedPlayer player, final WLGraphics3D sink) {
         this.setupAndPush(matrices, player);
-        final PlayerEntityModel model = player.model;
-        this.setupRenderState(player.state, model);
+        final PlayerModel model = player.model;
+        player.hideOuterLayers();
         this.applyFlyingTransforms(player, matrices);
-
-        final VertexConsumer buffer = immediate.getBuffer(Layers.WIREFRAME);
         final int color = this.alphaColor(this.state.wireframeColor, this.state.alpha);
+        final double thickness = this.state.wireframeThickness;
         for (final BodyPart part : BodyPart.values()) {
-            final Vec3d disp = this.getPartDisplacement(player, part);
-            matrices.push();
-            matrices.translate(disp.getX(), disp.getY(), disp.getZ());
-            this.renderWireframePart(model, part, matrices, buffer, color);
-            matrices.pop();
+            final Vec3 disp = this.getPartDisplacement(player, part);
+            matrices.pushPose();
+            matrices.translate(disp.x(), disp.y(), disp.z());
+            sink.submit(matrices, Layers.WIREFRAME, (stack, buffer) -> this.renderWireframePart(model, part, stack, buffer, color, thickness));
+            matrices.popPose();
         }
-
-        matrices.pop();
+        matrices.popPose();
     }
 
     private int alphaColor(final int baseColor, final float alphaMultiplier) {
-        final int newAlpha = MathHelper.clamp((int) (((baseColor >> 24) & 0xFF) * alphaMultiplier), 0, 255);
+        final int newAlpha = Mth.clamp((int) (((baseColor >> 24) & 0xFF) * alphaMultiplier), 0, 255);
         return (newAlpha << 24) | (baseColor & 0x00FFFFFF);
     }
 
-    private void renderModelPart(final PlayerEntityModel model, final BodyPart part, final MatrixStack matrices, final VertexConsumer buffer, final int color) {
+    private void renderModelPart(final PlayerModel model, final BodyPart part, final PoseStack matrices, final VertexConsumer buffer, final int color) {
         switch (part) {
-            case HEAD -> model.head.render(matrices, buffer, LIGHT, OverlayTexture.DEFAULT_UV, color);
-            case BODY -> model.body.render(matrices, buffer, LIGHT, OverlayTexture.DEFAULT_UV, color);
-            case LEFT_ARM -> model.leftArm.render(matrices, buffer, LIGHT, OverlayTexture.DEFAULT_UV, color);
-            case RIGHT_ARM -> model.rightArm.render(matrices, buffer, LIGHT, OverlayTexture.DEFAULT_UV, color);
-            case LEFT_LEG -> model.leftLeg.render(matrices, buffer, LIGHT, OverlayTexture.DEFAULT_UV, color);
-            case RIGHT_LEG -> model.rightLeg.render(matrices, buffer, LIGHT, OverlayTexture.DEFAULT_UV, color);
+            case HEAD -> model.head.render(matrices, buffer, LIGHT, OverlayTexture.NO_OVERLAY, color);
+            case BODY -> model.body.render(matrices, buffer, LIGHT, OverlayTexture.NO_OVERLAY, color);
+            case LEFT_ARM -> model.leftArm.render(matrices, buffer, LIGHT, OverlayTexture.NO_OVERLAY, color);
+            case RIGHT_ARM -> model.rightArm.render(matrices, buffer, LIGHT, OverlayTexture.NO_OVERLAY, color);
+            case LEFT_LEG -> model.leftLeg.render(matrices, buffer, LIGHT, OverlayTexture.NO_OVERLAY, color);
+            case RIGHT_LEG -> model.rightLeg.render(matrices, buffer, LIGHT, OverlayTexture.NO_OVERLAY, color);
         }
     }
 
-    private void renderWireframePart(final PlayerEntityModel model, final BodyPart part, final MatrixStack matrices, final VertexConsumer buffer, final int color) {
+    private void renderWireframePart(final PlayerModel model, final BodyPart part, final PoseStack matrices, final VertexConsumer buffer, final int color, final double thickness) {
         switch (part) {
-            case HEAD -> this.wireframeExtractor.extractModelPart(model.head, matrices, buffer, color, this.state.wireframeThickness);
-            case BODY -> this.wireframeExtractor.extractModelPart(model.body, matrices, buffer, color, this.state.wireframeThickness);
-            case LEFT_ARM -> this.wireframeExtractor.extractModelPart(model.leftArm, matrices, buffer, color, this.state.wireframeThickness);
-            case RIGHT_ARM -> this.wireframeExtractor.extractModelPart(model.rightArm, matrices, buffer, color, this.state.wireframeThickness);
-            case LEFT_LEG -> this.wireframeExtractor.extractModelPart(model.leftLeg, matrices, buffer, color, this.state.wireframeThickness);
-            case RIGHT_LEG -> this.wireframeExtractor.extractModelPart(model.rightLeg, matrices, buffer, color, this.state.wireframeThickness);
+            case HEAD -> this.wireframeExtractor.extractModelPart(model.head, matrices, buffer, color, thickness);
+            case BODY -> this.wireframeExtractor.extractModelPart(model.body, matrices, buffer, color, thickness);
+            case LEFT_ARM -> this.wireframeExtractor.extractModelPart(model.leftArm, matrices, buffer, color, thickness);
+            case RIGHT_ARM -> this.wireframeExtractor.extractModelPart(model.rightArm, matrices, buffer, color, thickness);
+            case LEFT_LEG -> this.wireframeExtractor.extractModelPart(model.leftLeg, matrices, buffer, color, thickness);
+            case RIGHT_LEG -> this.wireframeExtractor.extractModelPart(model.rightLeg, matrices, buffer, color, thickness);
         }
     }
 
-    private Vec3d getPartDisplacement(final CapturedPlayer player, final BodyPart part) {
+    private Vec3 getPartDisplacement(final CapturedPlayer player, final BodyPart part) {
         if (!this.state.disperse) {
-            return Vec3d.ZERO;
+            return Vec3.ZERO;
         }
-
-        final long seed = player.getUuid().getMostSignificantBits() ^ player.getUuid().getLeastSignificantBits() ^ part.ordinal();
-        final Random rand = Random.create(seed);
-
-        final Vec3d base = switch (part) {
-            case HEAD -> new Vec3d(0, -1, 0);
-            case BODY -> Vec3d.ZERO;
-            case LEFT_ARM -> new Vec3d(1, 0, 0);
-            case RIGHT_ARM -> new Vec3d(-1, 0, 0);
-            case LEFT_LEG -> new Vec3d(0.3, 1, 0);
-            case RIGHT_LEG -> new Vec3d(-0.3, 1, 0);
+        final long seed = player.getUUID()
+            .getMostSignificantBits() ^ player.getUUID()
+            .getLeastSignificantBits() ^ part.ordinal();
+        final RandomSource rand = RandomSource.create(seed);
+        final Vec3 base = switch (part) {
+            case HEAD -> new Vec3(0, -1, 0);
+            case BODY -> Vec3.ZERO;
+            case LEFT_ARM -> new Vec3(1, 0, 0);
+            case RIGHT_ARM -> new Vec3(-1, 0, 0);
+            case LEFT_LEG -> new Vec3(0.3, 1, 0);
+            case RIGHT_LEG -> new Vec3(-0.3, 1, 0);
         };
-        final Vec3d noise = new Vec3d((rand.nextDouble() - 0.5) * 0.5, (rand.nextDouble() - 0.5) * 0.5, (rand.nextDouble() - 0.5) * 0.5);
-        return base.add(noise).normalize().multiply(this.state.disperseMaxDistance);
+        final Vec3 noise = new Vec3((rand.nextDouble() - 0.5) * 0.5, (rand.nextDouble() - 0.5) * 0.5, (rand.nextDouble() - 0.5) * 0.5);
+        return base.add(noise).normalize().scale(this.state.disperseMaxDistance);
     }
 
-    private void setupRenderState(final PlayerEntityRenderState state, final PlayerEntityModel model) {
-        state.leftPantsLegVisible = false;
-        state.rightPantsLegVisible = false;
-        state.leftSleeveVisible = false;
-        state.rightSleeveVisible = false;
-        state.jacketVisible = false;
-        state.hatVisible = false;
-
-        model.leftPants.visible = false;
-        model.rightPants.visible = false;
-        model.leftSleeve.visible = false;
-        model.rightSleeve.visible = false;
-        model.jacket.visible = false;
-        model.hat.visible = false;
-    }
-
-    private void setupAndPush(final MatrixStack stack, final CapturedPlayer player) {
-        stack.push();
-        final Vec3d camera = MinecraftClient.getInstance().getEntityRenderDispatcher().camera.getCameraPos();
+    private void setupAndPush(final PoseStack stack, final CapturedPlayer player) {
+        stack.pushPose();
+        final Vec3 camera = Minecraft.getInstance().getEntityRenderDispatcher().camera.position();
         stack.translate(player.getX() - camera.x, player.getY() - camera.y, player.getZ() - camera.z);
-        stack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(180 - player.bodyYaw));
+        stack.mulPose(Axis.YP.rotationDegrees(180 - player.yBodyRot));
         stack.scale(-1.0F, -1.0F, 1.0F);
         stack.scale(1.6f / (float) 2, 1.8f / (float) 2, 1.6f / (float) 2);
         stack.translate(0.0F, -1.5F, 0.0F);
     }
 
-    private void applyFlyingTransforms(final CapturedPlayer player, final MatrixStack stack) {
-        if (!player.state.usingRiptide) {
-            stack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(player.glidingProcess * (90.0F - player.statePitch)));
+    private void applyFlyingTransforms(final CapturedPlayer player, final PoseStack stack) {
+        if (!player.autoSpinAttack) {
+            stack.mulPose(Axis.XP.rotationDegrees(player.glidingProcess * (90.0F - player.statePitch)));
         }
-        if (player.state.applyFlyingRotation) {
-            stack.multiply(RotationAxis.POSITIVE_Y.rotation(player.flyingRotation));
+        if (player.applyFlyingYRot) {
+            stack.mulPose(Axis.YP.rotation(player.flyingRotation));
         }
     }
 

@@ -1,0 +1,5 @@
+com\.mojang\.blaze3d\.pipeline\.RenderPipeline => com.mojang.renderpearl.api.pipeline.RenderPipeline
+\.mulPose\( => .rotate(
+this\.state\.attackTime = original\.attackAnim; => this.state.swingAnimation = original.getSwingAnimation(0F);
+this\.attackAnim = original\.attackAnim; => this.state.currentSwing = original.getCurrentSwing();
+this\.swingTime = original\.swingTime; => this.state.isAutoSpinAttack = original.isAutoSpinAttack();
